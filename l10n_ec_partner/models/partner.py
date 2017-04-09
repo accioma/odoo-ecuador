@@ -39,7 +39,7 @@ class ResPartner(models.Model):
         data = []
         for partner in self:
             display_val = u'{0} {1}'.format(
-                partner.identifier or '*',
+                partner.vat and partner.vat[2:] or '*',
                 partner.name
             )
             data.append((partner.id, display_val))
@@ -85,7 +85,7 @@ class ResPartner(models.Model):
     identifier = fields.Char(
         'Cedula/ RUC',
         size=13,
-        required=True,
+        required=False,
         help='Identificación o Registro Unico de Contribuyentes')
     type_identifier = fields.Selection(
         [
@@ -94,7 +94,7 @@ class ResPartner(models.Model):
             ('pasaporte', 'PASAPORTE')
             ],
         'Tipo ID',
-        required=True,
+        required=False,
         default='pasaporte'
     )
     tipo_persona = fields.Selection(
@@ -107,7 +107,8 @@ class ResPartner(models.Model):
         string='Persona',
         store=True
     )
-    is_company = fields.Boolean(default=True)
+
+    fantasy_name = fields.Char(string="Fantasy Name", )
 
     def validate_from_sri(self):
         """
