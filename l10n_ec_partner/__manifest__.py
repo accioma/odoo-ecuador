@@ -14,7 +14,7 @@
         'data/partner.xml'
     ],
     'depends': [
-        'base'
+        'base', 'base_vat'
     ],
     'external_dependencies': {
         'python': ['stdnum']

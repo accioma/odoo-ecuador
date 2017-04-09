@@ -16,58 +16,71 @@ class ResPartner(models.Model):
 
     _inherit = 'res.partner'
 
-    @api.multi
-    def update_identifiers(self):
-        sql = """UPDATE res_partner SET identifier='9999999999'
-        WHERE identifier is NULL"""
-        self.env.cr.execute(sql)
+    # @api.multi
+    # def update_identifiers(self):
+    #     sql = """UPDATE res_partner SET identifier='9999999999'
+    #     WHERE identifier is NULL"""
+    #     self.env.cr.execute(sql)
+    #
+    # @api.model_cr_context
+    # def init(self):
+    #     self.update_identifiers()
+    #     super(ResPartner, self).init()
+    #     sql_index = """
+    #     CREATE UNIQUE INDEX IF NOT EXISTS
+    #     unique_company_partner_identifier_type on res_partner
+    #     (company_id, type_identifier, identifier)
+    #     WHERE type_identifier <> 'pasaporte'"""
+    #     self._cr.execute(sql_index)
 
-    @api.model_cr_context
-    def init(self):
-        self.update_identifiers()
-        super(ResPartner, self).init()
-        sql_index = """
-        CREATE UNIQUE INDEX IF NOT EXISTS
-        unique_company_partner_identifier_type on res_partner
-        (company_id, type_identifier, identifier)
-        WHERE type_identifier <> 'pasaporte'"""
-        self._cr.execute(sql_index)
-
     @api.multi
-    @api.depends('identifier', 'name')
+    @api.depends('vat', 'name')
     def name_get(self):
+        """Name get method."""
         data = []
         for partner in self:
-            display_val = u'{0} {1}'.format(
+            display_val = u'[{0}]{1}'.format(
                 partner.vat and partner.vat[2:] or '*',
                 partner.name
             )
             data.append((partner.id, display_val))
         return data
 
+    @api.multi
+    @api.depends('vat', 'name')
+    def _compute_display_name(self):
+        """Name get method."""
+        self.ensure_one()
+        self.display_name = u'[{0}]{1}'.format(
+                self.vat and self.vat[2:] or '*',
+                self.name
+            )
+
     @api.model
     def name_search(self, name, args=None, operator='ilike', limit=80):
         if not args:
             args = []
         if name:
-            partners = self.search([('identifier', operator, name)] + args, limit=limit)  # noqa
+            partners = self.search([('vat', operator, name)] + args, limit=limit)  # noqa
             if not partners:
                 partners = self.search([('name', operator, name)] + args, limit=limit)  # noqa
         else:
             partners = self.search(args, limit=limit)
         return partners.name_get()
 
-    @api.one
-    @api.constrains('identifier')
-    def _check_identifier(self):
-        res = False
-        if self.type_identifier == 'cedula':
-            res = ec.ci.is_valid(self.identifier)
-        elif self.type_identifier == 'ruc':
-            res = ec.ruc.is_valid(self.identifier)
-        else:
+    @api.multi
+    @api.constrains('vat')
+    def _check_vat(self):
+        self.ensure_one()
+        val_func_dict = {'citizenship_card': ec.ci.is_valid,
+                         'ruc': ec.ruc.is_valid
+                         }
+        if self.vat_type == 'passport':
             return True
-        if not res:
+
+        if val_func_dict[self.vat_type](self.vat[2:]):
+            return True
+        else:
             raise ValidationError('Error en el identificador.')
 
     @api.one
@@ -87,16 +100,18 @@ class ResPartner(models.Model):
         size=13,
         required=False,
         help='Identificación o Registro Unico de Contribuyentes')
-    type_identifier = fields.Selection(
+
+    vat_type = fields.Selection(
         [
-            ('cedula', 'CEDULA'),
+            ('citizenship_card', 'CEDULA'),
             ('ruc', 'RUC'),
-            ('pasaporte', 'PASAPORTE')
+            ('passport', 'PASAPORTE')
             ],
         'Tipo ID',
         required=False,
-        default='pasaporte'
+        default='passport'
     )
+
     tipo_persona = fields.Selection(
         compute='_compute_tipo_persona',
         selection=[
@@ -109,11 +124,10 @@ class ResPartner(models.Model):
     )
 
     fantasy_name = fields.Char(string="Fantasy Name", )
+    display_name = fields.Char(string="Display Name", compute='_compute_display_name')
 
     def validate_from_sri(self):
-        """
-        TODO
-        """
+        """ TODO """
         SRI_LINK = "https://declaraciones.sri.gob.ec/facturacion-internet/consultas/publico/ruc-datos1.jspa"  # noqa
         texto = '0103893954'  # noqa
 
